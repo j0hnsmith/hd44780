@@ -29,7 +29,15 @@ type registerSelect byte
 //		}
 type CustomChar [8]byte
 
+// BacklightPolarity is used to set the polarity of the backlight switch, either positive or negative.
+type BacklightPolarity bool
+
 const (
+	// Negative indicates that the backlight is active-low and must have a logical low value to enable.
+	Negative BacklightPolarity = false
+	// Positive indicates that the backlight is active-high and must have a logical high value to enable.
+	Positive BacklightPolarity = true
+
 	// delay values from http://irtfweb.ifa.hawaii.edu/~tcs3/tcs3/vendor_info/Technologic_systems/embeddedx86/HD44780_LCD/lcd0.shtml.htm#instruction_set
 	writeDelay = 40 * time.Microsecond
 	pulseDelay = 1 * time.Microsecond
@@ -90,10 +98,35 @@ const (
 
 	registerSelectHigh registerSelect = 0x1
 	registerSelectLow  registerSelect = 0x0
+// I2CPinMap represents a mapping between the pins on an I²C port expander and
+// the pins on the HD44780 controller.
+type I2CPinMap struct {
+	RS, RW, EN     byte
+	D4, D5, D6, D7 byte
+	Backlight      byte
+	BLPolarity     BacklightPolarity
+}
+
+var (
+	// MJKDZPinMap is the standard pin mapping for an MJKDZ-based I²C backpack.
+	MJKDZPinMap I2CPinMap = I2CPinMap{
+		RS: 6, RW: 5, EN: 4,
+		D4: 0, D5: 1, D6: 2, D7: 3,
+		Backlight:  7,
+		BLPolarity: Negative,
+	}
+	// PCF8574PinMap is the standard pin mapping for a PCF8574-based I²C backpack.
+	PCF8574PinMap I2CPinMap = I2CPinMap{
+		RS: 0, RW: 1, EN: 2,
+		D4: 4, D5: 5, D6: 6, D7: 7,
+		Backlight:  3,
+		BLPolarity: Positive,
+	}
 )
 
 type Hd44780I2c struct {
 	I2C       *i2c.I2C
+	PinMap    I2CPinMap
 	backlight bool
 	eMode     entryMode
 	dMode     displayMode
@@ -101,9 +134,10 @@ type Hd44780I2c struct {
 }
 
 // NewHd44780I2c returns a new Connection based on an I²C bus.
-func NewHd44780I2c(i2c *i2c.I2C, modes ...ModeSetter) (*Hd44780I2c, error) {
+func NewHd44780I2c(i2c *i2c.I2C, pinMap I2CPinMap, modes ...ModeSetter) (*Hd44780I2c, error) {
 	c := &Hd44780I2c{
 		I2C:       i2c,
+		PinMap:    pinMap,
 		backlight: true,
 		eMode:     0x00,
 		dMode:     0x00,
