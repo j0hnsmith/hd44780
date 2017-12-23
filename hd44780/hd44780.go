@@ -278,7 +278,30 @@ func (this *Hd44780I2c) DisplayString(str string, line, pos byte) error {
 	return nil
 }
 
+func (this *Hd44780I2c) Write(buf []byte) (int, error) {
+	for i, c := range buf {
+		err := this.WriteChar(c)
+		if err != nil {
+			return maxInt(i-1, 0), err
+		}
 	}
+	return len(buf), nil
+}
+
+// SetDDRamAddr sets the input cursor to the given address.
+func (this *Hd44780I2c) SetDDRamAddr(value byte) error {
+	return this.WriteInstruction(lcdSetDDRamAddr | value)
+}
+
+// WriteChar writes a byte to the bus with register select in data mode.
+func (this *Hd44780I2c) WriteChar(value byte) error {
+	return this.write(value, registerSelectHigh)
+}
+
+// WriteInstruction writes a byte to the bus with register select in command mode.
+func (this *Hd44780I2c) WriteInstruction(value byte) error {
+	return this.write(value, registerSelectLow)
+}
 }
 
 func (this *Hd44780I2c) BacklightOn() error {
@@ -474,3 +497,9 @@ func (hd *Hd44780I2c) EightBitModeEnabled() bool { return hd.fMode&lcd8BitMode >
 // display mode is enabled.
 func (hd *Hd44780I2c) TwoLineEnabled() bool { return hd.fMode&lcd2Line > 0 }
 
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
