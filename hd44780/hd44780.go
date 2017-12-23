@@ -10,6 +10,8 @@ import (
 type entryMode byte
 type displayMode byte
 type functionMode byte
+type registerSelect byte
+
 // CustomChar represents the data for a custom character. Only bits 0 - 4 are used.
 // Index 0 is the topmost line, bits set to 1 are 'on'. There's a nice generator that outputs hex
 // https://www.quinapalus.com/hd44780udg.html
@@ -86,8 +88,8 @@ const (
 	enableBit    byte = 0x4 // EN
 	readWriteBit byte = 0x2 // RW
 
-	registerSelectHigh byte = 0x1
-	registerSelectLow  byte = 0x0
+	registerSelectHigh registerSelect = 0x1
+	registerSelectLow  registerSelect = 0x0
 )
 
 type Hd44780I2c struct {
@@ -123,26 +125,26 @@ func NewHd44780I2c(i2c *i2c.I2C, modes ...ModeSetter) (*Hd44780I2c, error) {
 
 func (this *Hd44780I2c) lcdInit() error {
 	time.Sleep(time.Millisecond * 20)
-	err := this.writeByte(0x03, registerSelectLow) // init
+	err := this.WriteInstruction(0x03) // init
 	if err != nil {
 		return err
 	}
 
 	time.Sleep(initDelay1)
 
-	err = this.writeByte(0x03, registerSelectLow) // init
+	err = this.WriteInstruction(0x03) // init
 	if err != nil {
 		return err
 	}
 
 	time.Sleep(initDelay2)
 
-	err = this.writeByte(0x03, registerSelectLow) // init
+	err = this.WriteInstruction(0x03) // init
 	if err != nil {
 		return err
 	}
 
-	err = this.writeByte(0x02, registerSelectLow) // 4 bit mode
+	err = this.WriteInstruction(0x02) // 4 bit mode
 	if err != nil {
 		return err
 	}
@@ -171,78 +173,49 @@ func (hd *Hd44780I2c) SetMode(modes ...ModeSetter) error {
 }
 
 func (hd *Hd44780I2c) setEntryMode() error {
-	return hd.writeByte(byte(lcdSetEntryMode|hd.eMode), registerSelectLow)
+	return hd.WriteInstruction(byte(lcdSetEntryMode | hd.eMode))
 }
 
 func (hd *Hd44780I2c) setDisplayMode() error {
-	return hd.writeByte(byte(lcdSetDisplayMode|hd.dMode), registerSelectLow)
+	return hd.WriteInstruction(byte(lcdSetDisplayMode | hd.dMode))
 }
 
 func (hd *Hd44780I2c) setFunctionMode() error {
-	return hd.writeByte(byte(lcdSetFunctionMode|hd.fMode), registerSelectLow)
+	return hd.WriteInstruction(byte(lcdSetFunctionMode | hd.fMode))
 }
 
-func (this *Hd44780I2c) strobe(data byte) error {
-	fmt.Println("in strobe")
-	fmt.Printf("first write: %b\n", data|enableBit)
-	_, err := this.I2C.WriteByte(data | enableBit)
-	if err != nil {
-		return err
+// write writes a register select flag and byte to the I²C connection.
+func (this *Hd44780I2c) write(data byte, rs registerSelect) error {
+	var instructionHigh byte = 0x00
+	instructionHigh |= ((data >> 4) & 0x01) << this.PinMap.D4
+	instructionHigh |= ((data >> 5) & 0x01) << this.PinMap.D5
+	instructionHigh |= ((data >> 6) & 0x01) << this.PinMap.D6
+	instructionHigh |= ((data >> 7) & 0x01) << this.PinMap.D7
+
+	var instructionLow byte = 0x00
+	instructionLow |= ((data >> 0) & 0x01) << this.PinMap.D4
+	instructionLow |= ((data >> 1) & 0x01) << this.PinMap.D5
+	instructionLow |= ((data >> 2) & 0x01) << this.PinMap.D6
+	instructionLow |= ((data >> 3) & 0x01) << this.PinMap.D7
+
+	instructions := []byte{instructionHigh, instructionLow}
+	for _, ins := range instructions {
+		ins |= byte(rs) << this.PinMap.RS
+		if this.backlight == bool(this.PinMap.BLPolarity) {
+			ins |= 0x01 << this.PinMap.Backlight
+		}
+
+		bytes := []byte{ins, ins | (0x01 << this.PinMap.EN), ins}
+		for _, b := range bytes {
+			time.Sleep(pulseDelay)
+			_, err := this.I2C.WriteByte(b)
+			if err != nil {
+				return err
+			}
+		}
 	}
-	time.Sleep(time.Microsecond * 200)
-	_, err = this.I2C.WriteByte((data & ^enableBit))
-	if err != nil {
-		return err
-	}
-	time.Sleep(time.Microsecond * 30)
+	time.Sleep(writeDelay) // is this necessary with i2c?
 	return nil
-}
-
-func (this *Hd44780I2c) writeFourBits(data byte) error {
-	fmt.Printf("write 4: %b\n", data)
-	_, err := this.I2C.WriteByte(data)
-	if err != nil {
-		return err
-	}
-	err = this.strobe(data)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (this *Hd44780I2c) prepareFirstFourBits(data byte) byte {
-	if this.backlight {
-		return (data & 0xF0) | lcdBacklightOn
-	} else {
-		return (data & 0xF0) | lcdBacklightOff
-	}
-}
-
-func (this *Hd44780I2c) prepareSecondFourBits(data byte) byte {
-	if this.backlight {
-		return ((data << 4) & 0xF0) | lcdBacklightOn
-	} else {
-		return ((data << 4) & 0xF0) | lcdBacklightOff
-	}
-}
-
-func (this *Hd44780I2c) writeByte(data, rs byte) error {
-	first := this.prepareFirstFourBits(data)
-	second := this.prepareSecondFourBits(data)
-
-	// first 4 bits
-	err := this.writeFourBits(byte(rs) | first)
-	if err != nil {
-		return err
-	}
-
-	// second 4 bits
-	err = this.writeFourBits(byte(rs) | second)
-	if err != nil {
-		return err
-	}
-	return err
 }
 
 func (this *Hd44780I2c) DisplayString(str string, line, pos byte) error {
@@ -258,12 +231,12 @@ func (this *Hd44780I2c) DisplayString(str string, line, pos byte) error {
 		address = 0x54 + pos
 	}
 
-	err := this.writeByte(0x80+address, registerSelectLow)
+	err := this.WriteInstruction(lcdSetDDRamAddr + address)
 	if err != nil {
 		return err
 	}
 	for _, c := range str {
-		err = this.writeByte(byte(c), registerSelectHigh)
+		err = this.WriteChar(byte(c))
 		if err != nil {
 			return err
 		}
@@ -336,23 +309,23 @@ func (this *Hd44780I2c) EntryShiftOff() error {
 
 // ShiftLeft shifts the cursor and all characters to the left.
 func (this *Hd44780I2c) ShiftLeft() error {
-	return this.writeByte(lcdCursorShift|lcdDisplayMove|lcdMoveLeft, registerSelectLow)
+	return this.WriteInstruction(lcdCursorShift | lcdDisplayMove | lcdMoveLeft)
 }
 
 // ShiftRight shifts the cursor and all characters to the right.
 func (this *Hd44780I2c) ShiftRight() error {
-	return this.writeByte(lcdCursorShift|lcdDisplayMove|lcdMoveRight, registerSelectLow)
+	return this.WriteInstruction(lcdCursorShift | lcdDisplayMove | lcdMoveRight)
 }
 
 // Home moves the cursor and all characters to the home position.
 func (this *Hd44780I2c) Home() error {
-	err := this.writeByte(lcdReturnHome, registerSelectLow)
+	err := this.WriteInstruction(lcdReturnHome)
 	return err
 }
 
 // Clear clears the display and mode settings sets the cursor to the home position.
 func (this *Hd44780I2c) Clear() error {
-	err := this.writeByte(lcdClearDisplay, registerSelectLow)
+	err := this.WriteInstruction(lcdClearDisplay)
 	if err != nil {
 		return err
 	}
@@ -361,15 +334,16 @@ func (this *Hd44780I2c) Clear() error {
 	return this.SetMode()
 }
 
+// LoadCustomChars stores 8 custom characters into CGRAM, see type CustomChar docs for an example.
 func (this *Hd44780I2c) LoadCustomChars(chars [8]CustomChar) error {
-	err := this.writeByte(lcdSetCGRamAddr, registerSelectLow)
+	err := this.WriteInstruction(lcdSetCGRamAddr)
 	if err != nil {
 		return err
 	}
 
 	for _, c := range chars {
 		for _, b := range c {
-			err = this.writeByte(b, registerSelectHigh)
+			err = this.WriteChar(b)
 			if err != nil {
 				return err
 			}
