@@ -98,6 +98,9 @@ const (
 
 	registerSelectHigh registerSelect = 0x1
 	registerSelectLow  registerSelect = 0x0
+
+	// read bits
+	busyBit byte = 0x80
 )
 
 // RowAddress defines the cursor (DDRAM) address of the first column of each row, up to 4 rows.
@@ -266,6 +269,75 @@ func (hd *Hd44780I2c) write(data byte, rs registerSelect) error {
 	}
 	time.Sleep(writeDelay) // is this necessary with i2c?
 	return nil
+}
+
+// ReadStatus doesn't work, I'm not sure it's possible to read via i2c. I'm not the only person who hasn't been able to
+// do it successfully
+// https://www.eevblog.com/forum/microcontrollers/busy-check-with-hd44780-via-12c/. It does return data but it's the
+// bits set from this end. This is left here in the hope that someone else figures it out.
+func (hd *Hd44780I2c) ReadStatus() (bool, byte, error) {
+	sendByte := byte(0x0) | (0x01 << hd.PinMap.RW)
+	if hd.backlight == bool(hd.PinMap.BLPolarity) {
+		sendByte |= 0x01 << hd.PinMap.Backlight
+	}
+
+	// 1st nibble
+	_, err := hd.I2C.WriteByte(sendByte)
+	if err != nil {
+		return false, 0x0, err
+	}
+	time.Sleep(pulseDelay)
+
+	// toggle enable
+	_, err = hd.I2C.WriteByte(sendByte | (0x01 << hd.PinMap.EN))
+	if err != nil {
+		return false, 0x0, err
+	}
+	_, err = hd.I2C.WriteByte(sendByte)
+	if err != nil {
+		return false, 0x0, err
+	}
+
+	time.Sleep(pulseDelay)
+	data1 := make([]byte, 2)
+	size, err := hd.I2C.Read(data1)
+	if err != nil {
+		return false, 0x0, err
+	}
+
+	time.Sleep(pulseDelay)
+
+	// 2nd nibble
+	//_, err = this.I2C.WriteByte(sendByte)
+	//if err != nil {
+	//	return false, 0x0, err
+	//}
+	//time.Sleep(pulseDelay)
+	//
+	//// toggle enable
+	//_, err = this.I2C.WriteByte(sendByte | (0x01 << this.PinMap.EN))
+	//if err != nil {
+	//	return false, 0x0, err
+	//}
+
+	data2 := make([]byte, 1)
+	size, err = hd.I2C.Read(data1)
+	if err != nil {
+		return false, 0x0, err
+	}
+
+	if size == 2 {
+		fmt.Printf("data: %#02x %#02x\n", data1[0], data2[0])
+		fmt.Printf("data: %b %b\n", data1[0], data2[0])
+		//busy := bool((data[0] & busyBit) > 0)
+		//addr := data[0] & ^busyBit
+		busy := false
+		addr := byte(0x0)
+
+		return busy, addr, nil
+	}
+
+	return false, 0x0, fmt.Errorf("invalid read size: %d", size)
 }
 
 func (hd *Hd44780I2c) DisplayString(str string, line, pos byte) error {
