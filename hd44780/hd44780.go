@@ -98,6 +98,20 @@ const (
 
 	registerSelectHigh registerSelect = 0x1
 	registerSelectLow  registerSelect = 0x0
+)
+
+// RowAddress defines the cursor (DDRAM) address of the first column of each row, up to 4 rows.
+// You must use the RowAddress value that matches the number of columns on your character display
+// for the SetCursor function to work correctly.
+type RowAddress [4]byte
+
+var (
+	// RowAddress16Col are row addresses for a 16-column display
+	RowAddress16Col RowAddress = [4]byte{0x00, 0x40, 0x10, 0x50}
+	// RowAddress20Col are row addresses for a 20-column display
+	RowAddress20Col RowAddress = [4]byte{0x00, 0x40, 0x14, 0x54}
+)
+
 // I2CPinMap represents a mapping between the pins on an I²C port expander and
 // the pins on the HD44780 controller.
 type I2CPinMap struct {
@@ -127,6 +141,7 @@ var (
 type Hd44780I2c struct {
 	I2C       *i2c.I2C
 	PinMap    I2CPinMap
+	RowAddr   RowAddress
 	backlight bool
 	eMode     entryMode
 	dMode     displayMode
@@ -134,10 +149,11 @@ type Hd44780I2c struct {
 }
 
 // NewHd44780I2c returns a new Connection based on an I²C bus.
-func NewHd44780I2c(i2c *i2c.I2C, pinMap I2CPinMap, modes ...ModeSetter) (*Hd44780I2c, error) {
+func NewHd44780I2c(i2c *i2c.I2C, pinMap I2CPinMap, rowAddr RowAddress, modes ...ModeSetter) (*Hd44780I2c, error) {
 	c := &Hd44780I2c{
 		I2C:       i2c,
 		PinMap:    pinMap,
+		RowAddr:   rowAddr,
 		backlight: true,
 		eMode:     0x00,
 		dMode:     0x00,
@@ -256,13 +272,13 @@ func (hd *Hd44780I2c) DisplayString(str string, line, pos byte) error {
 	var address byte
 	switch line {
 	case 1:
-		address = pos
+		address = hd.RowAddr[0] + pos
 	case 2:
-		address = 0x40 + pos
+		address = hd.RowAddr[1] + pos
 	case 3:
-		address = 0x10 + pos
+		address = hd.RowAddr[2] + pos
 	case 4:
-		address = 0x54 + pos
+		address = hd.RowAddr[3] + pos
 	}
 
 	err := hd.WriteInstruction(lcdSetDDRamAddr + address)
