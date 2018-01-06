@@ -157,33 +157,33 @@ func NewHd44780I2c(i2c *i2c.I2C, pinMap I2CPinMap, modes ...ModeSetter) (*Hd4478
 	return c, nil
 }
 
-func (this *Hd44780I2c) lcdInit() error {
+func (hd *Hd44780I2c) lcdInit() error {
 	time.Sleep(time.Millisecond * 20)
-	err := this.WriteInstruction(0x03) // init
+	err := hd.WriteInstruction(0x03) // init
 	if err != nil {
 		return err
 	}
 
 	time.Sleep(initDelay1)
 
-	err = this.WriteInstruction(0x03) // init
+	err = hd.WriteInstruction(0x03) // init
 	if err != nil {
 		return err
 	}
 
 	time.Sleep(initDelay2)
 
-	err = this.WriteInstruction(0x03) // init
+	err = hd.WriteInstruction(0x03) // init
 	if err != nil {
 		return err
 	}
 
-	err = this.WriteInstruction(0x02) // 4 bit mode
+	err = hd.WriteInstruction(0x02) // 4 bit mode
 	if err != nil {
 		return err
 	}
 
-	return this.Clear()
+	return hd.Clear()
 }
 
 // SetModes modifies the entry mode, display mode, and function mode with the
@@ -219,30 +219,30 @@ func (hd *Hd44780I2c) setFunctionMode() error {
 }
 
 // write writes a register select flag and byte to the I²C connection.
-func (this *Hd44780I2c) write(data byte, rs registerSelect) error {
+func (hd *Hd44780I2c) write(data byte, rs registerSelect) error {
 	var instructionHigh byte = 0x00
-	instructionHigh |= ((data >> 4) & 0x01) << this.PinMap.D4
-	instructionHigh |= ((data >> 5) & 0x01) << this.PinMap.D5
-	instructionHigh |= ((data >> 6) & 0x01) << this.PinMap.D6
-	instructionHigh |= ((data >> 7) & 0x01) << this.PinMap.D7
+	instructionHigh |= ((data >> 4) & 0x01) << hd.PinMap.D4
+	instructionHigh |= ((data >> 5) & 0x01) << hd.PinMap.D5
+	instructionHigh |= ((data >> 6) & 0x01) << hd.PinMap.D6
+	instructionHigh |= ((data >> 7) & 0x01) << hd.PinMap.D7
 
 	var instructionLow byte = 0x00
-	instructionLow |= ((data >> 0) & 0x01) << this.PinMap.D4
-	instructionLow |= ((data >> 1) & 0x01) << this.PinMap.D5
-	instructionLow |= ((data >> 2) & 0x01) << this.PinMap.D6
-	instructionLow |= ((data >> 3) & 0x01) << this.PinMap.D7
+	instructionLow |= ((data >> 0) & 0x01) << hd.PinMap.D4
+	instructionLow |= ((data >> 1) & 0x01) << hd.PinMap.D5
+	instructionLow |= ((data >> 2) & 0x01) << hd.PinMap.D6
+	instructionLow |= ((data >> 3) & 0x01) << hd.PinMap.D7
 
 	instructions := []byte{instructionHigh, instructionLow}
 	for _, ins := range instructions {
-		ins |= byte(rs) << this.PinMap.RS
-		if this.backlight == bool(this.PinMap.BLPolarity) {
-			ins |= 0x01 << this.PinMap.Backlight
+		ins |= byte(rs) << hd.PinMap.RS
+		if hd.backlight == bool(hd.PinMap.BLPolarity) {
+			ins |= 0x01 << hd.PinMap.Backlight
 		}
 
-		bytes := []byte{ins, ins | (0x01 << this.PinMap.EN), ins}
+		bytes := []byte{ins, ins | (0x01 << hd.PinMap.EN), ins}
 		for _, b := range bytes {
 			time.Sleep(pulseDelay)
-			_, err := this.I2C.WriteByte(b)
+			_, err := hd.I2C.WriteByte(b)
 			if err != nil {
 				return err
 			}
@@ -252,7 +252,7 @@ func (this *Hd44780I2c) write(data byte, rs registerSelect) error {
 	return nil
 }
 
-func (this *Hd44780I2c) DisplayString(str string, line, pos byte) error {
+func (hd *Hd44780I2c) DisplayString(str string, line, pos byte) error {
 	var address byte
 	switch line {
 	case 1:
@@ -265,12 +265,12 @@ func (this *Hd44780I2c) DisplayString(str string, line, pos byte) error {
 		address = 0x54 + pos
 	}
 
-	err := this.WriteInstruction(lcdSetDDRamAddr + address)
+	err := hd.WriteInstruction(lcdSetDDRamAddr + address)
 	if err != nil {
 		return err
 	}
 	for _, c := range str {
-		err = this.WriteChar(byte(c))
+		err = hd.WriteChar(byte(c))
 		if err != nil {
 			return err
 		}
@@ -278,9 +278,9 @@ func (this *Hd44780I2c) DisplayString(str string, line, pos byte) error {
 	return nil
 }
 
-func (this *Hd44780I2c) Write(buf []byte) (int, error) {
+func (hd *Hd44780I2c) Write(buf []byte) (int, error) {
 	for i, c := range buf {
-		err := this.WriteChar(c)
+		err := hd.WriteChar(c)
 		if err != nil {
 			return maxInt(i-1, 0), err
 		}
@@ -289,118 +289,117 @@ func (this *Hd44780I2c) Write(buf []byte) (int, error) {
 }
 
 // SetDDRamAddr sets the input cursor to the given address.
-func (this *Hd44780I2c) SetDDRamAddr(value byte) error {
-	return this.WriteInstruction(lcdSetDDRamAddr | value)
+func (hd *Hd44780I2c) SetDDRamAddr(value byte) error {
+	return hd.WriteInstruction(lcdSetDDRamAddr | value)
 }
 
 // WriteChar writes a byte to the bus with register select in data mode.
-func (this *Hd44780I2c) WriteChar(value byte) error {
-	return this.write(value, registerSelectHigh)
+func (hd *Hd44780I2c) WriteChar(value byte) error {
+	return hd.write(value, registerSelectHigh)
 }
 
 // WriteInstruction writes a byte to the bus with register select in command mode.
-func (this *Hd44780I2c) WriteInstruction(value byte) error {
-	return this.write(value, registerSelectLow)
-}
+func (hd *Hd44780I2c) WriteInstruction(value byte) error {
+	return hd.write(value, registerSelectLow)
 }
 
-func (this *Hd44780I2c) BacklightOn() error {
-	this.backlight = true
-	_, err := this.I2C.WriteByte(lcdBacklightOn)
+func (hd *Hd44780I2c) BacklightOn() error {
+	hd.backlight = true
+	_, err := hd.I2C.WriteByte(lcdBacklightOn)
 	return err
 }
 
-func (this *Hd44780I2c) BacklightOff() error {
-	this.backlight = false
-	_, err := this.I2C.WriteByte(lcdBacklightOff)
+func (hd *Hd44780I2c) BacklightOff() error {
+	hd.backlight = false
+	_, err := hd.I2C.WriteByte(lcdBacklightOff)
 	return err
 }
 
 // DisplayOff sets the display mode to off.
-func (this *Hd44780I2c) DisplayOff() error {
-	DisplayOff(this)
-	return this.setDisplayMode()
+func (hd *Hd44780I2c) DisplayOff() error {
+	DisplayOff(hd)
+	return hd.setDisplayMode()
 }
 
 // DisplayOn sets the display mode to on.
-func (this *Hd44780I2c) DisplayOn() error {
-	DisplayOn(this)
-	return this.setDisplayMode()
+func (hd *Hd44780I2c) DisplayOn() error {
+	DisplayOn(hd)
+	return hd.setDisplayMode()
 }
 
 // UnderlineCursorOff turns the cursor off.
-func (this *Hd44780I2c) UnderlineCursorOff() error {
-	UnderlineCursorOff(this)
-	return this.setDisplayMode()
+func (hd *Hd44780I2c) UnderlineCursorOff() error {
+	UnderlineCursorOff(hd)
+	return hd.setDisplayMode()
 }
 
 // UnderlineCursorOn turns the cursor on.
-func (this *Hd44780I2c) UnderlineCursorOn() error {
-	UnderlineCursorOn(this)
-	return this.setDisplayMode()
+func (hd *Hd44780I2c) UnderlineCursorOn() error {
+	UnderlineCursorOn(hd)
+	return hd.setDisplayMode()
 }
 
 // BlinkCursorOff sets cursor blink mode off.
-func (this *Hd44780I2c) BlinkCursorOff() error {
-	BlinkCursorOff(this)
-	return this.setDisplayMode()
+func (hd *Hd44780I2c) BlinkCursorOff() error {
+	BlinkCursorOff(hd)
+	return hd.setDisplayMode()
 }
 
 // BlinkCursorOn sets cursor blink mode on.
-func (this *Hd44780I2c) BlinkCursorOn() error {
-	BlinkCursorOn(this)
-	return this.setDisplayMode()
+func (hd *Hd44780I2c) BlinkCursorOn() error {
+	BlinkCursorOn(hd)
+	return hd.setDisplayMode()
 }
 
 // EntryShiftOn sets entry shift on, moves all the text one space each time a letter is added.
-func (this *Hd44780I2c) EntryShiftOn() error {
-	EntryShiftOn(this)
-	return this.setEntryMode()
+func (hd *Hd44780I2c) EntryShiftOn() error {
+	EntryShiftOn(hd)
+	return hd.setEntryMode()
 }
 
 // EntryShiftOn sets entry shift off.
-func (this *Hd44780I2c) EntryShiftOff() error {
-	EntryShiftOff(this)
-	return this.setEntryMode()
+func (hd *Hd44780I2c) EntryShiftOff() error {
+	EntryShiftOff(hd)
+	return hd.setEntryMode()
 }
 
 // ShiftLeft shifts the cursor and all characters to the left.
-func (this *Hd44780I2c) ShiftLeft() error {
-	return this.WriteInstruction(lcdCursorShift | lcdDisplayMove | lcdMoveLeft)
+func (hd *Hd44780I2c) ShiftLeft() error {
+	return hd.WriteInstruction(lcdCursorShift | lcdDisplayMove | lcdMoveLeft)
 }
 
 // ShiftRight shifts the cursor and all characters to the right.
-func (this *Hd44780I2c) ShiftRight() error {
-	return this.WriteInstruction(lcdCursorShift | lcdDisplayMove | lcdMoveRight)
+func (hd *Hd44780I2c) ShiftRight() error {
+	return hd.WriteInstruction(lcdCursorShift | lcdDisplayMove | lcdMoveRight)
 }
 
 // Home moves the cursor and all characters to the home position.
-func (this *Hd44780I2c) Home() error {
-	err := this.WriteInstruction(lcdReturnHome)
+func (hd *Hd44780I2c) Home() error {
+	err := hd.WriteInstruction(lcdReturnHome)
 	return err
 }
 
 // Clear clears the display and mode settings sets the cursor to the home position.
-func (this *Hd44780I2c) Clear() error {
-	err := this.WriteInstruction(lcdClearDisplay)
+func (hd *Hd44780I2c) Clear() error {
+	err := hd.WriteInstruction(lcdClearDisplay)
 	if err != nil {
 		return err
 	}
 	time.Sleep(clearDelay)
 	// have to set mode here because clear also clears some mode settings
-	return this.SetMode()
+	return hd.SetMode()
 }
 
 // LoadCustomChars stores 8 custom characters into CGRAM, see type CustomChar docs for an example.
-func (this *Hd44780I2c) LoadCustomChars(chars [8]CustomChar) error {
-	err := this.WriteInstruction(lcdSetCGRamAddr)
+func (hd *Hd44780I2c) LoadCustomChars(chars [8]CustomChar) error {
+	err := hd.WriteInstruction(lcdSetCGRamAddr)
 	if err != nil {
 		return err
 	}
 
 	for _, c := range chars {
 		for _, b := range c {
-			err = this.WriteChar(b)
+			err = hd.WriteChar(b)
 			if err != nil {
 				return err
 			}
