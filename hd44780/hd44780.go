@@ -1,3 +1,4 @@
+// Package hd44780 enables control of a HD4470 lcd via I²C.
 package hd44780
 
 import (
@@ -547,7 +548,7 @@ func BlinkCursorOn(hd *Hd44780I2c) { hd.dMode |= lcdBlinkCursorOn }
 // FourBitMode is a ModeSetter that sets the HD44780 to 4-bit bus mode.
 func FourBitMode(hd *Hd44780I2c) { hd.fMode &= ^lcd8BitMode }
 
-// EightBitMode is a ModeSetter that sets the HD44780 to 8-bit bus mode.
+// EightBitMode is a ModeSetter that sets the HD44780 to 8-bit bus mode (only 4 bit mode valid with I²C).
 func EightBitMode(hd *Hd44780I2c) { hd.fMode |= lcd8BitMode }
 
 // OneLine is a ModeSetter that sets the HD44780 to 1-line display mode.
