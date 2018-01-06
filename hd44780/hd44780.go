@@ -12,7 +12,7 @@ type displayMode byte
 type functionMode byte
 type registerSelect byte
 
-// CustomChar represents the data for a custom character. Only bits 0 - 4 are used.
+// CustomChar represents the data for a custom character. Only bits 0 - 4 are used (least significant).
 // Index 0 is the topmost line, bits set to 1 are 'on'. There's a nice generator that outputs hex
 // https://www.quinapalus.com/hd44780udg.html
 //
