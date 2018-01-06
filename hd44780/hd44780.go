@@ -340,16 +340,17 @@ func (hd *Hd44780I2c) ReadStatus() (bool, byte, error) {
 	return false, 0x0, fmt.Errorf("invalid read size: %d", size)
 }
 
+// DisplayString displays the given string at the specified position, line is zero indexed.
 func (hd *Hd44780I2c) DisplayString(str string, line, pos byte) error {
 	var address byte
 	switch line {
-	case 1:
+	case 0:
 		address = hd.RowAddr[0] + pos
-	case 2:
+	case 1:
 		address = hd.RowAddr[1] + pos
-	case 3:
+	case 2:
 		address = hd.RowAddr[2] + pos
-	case 4:
+	case 3:
 		address = hd.RowAddr[3] + pos
 	}
 
